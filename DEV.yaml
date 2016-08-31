@@ -1,0 +1,26 @@
+version: '2'
+services:
+  dev:
+    extends:
+      file: docker-compose-common.yaml
+      service: app
+    ports:
+      - "10010:10010"
+    networks:
+      - dev
+    depends_on:
+      - dev-mongodb
+    environment:
+      - "DB=dev-mongodb/app"
+  dev-mongodb:
+    extends:
+      file: docker-compose-common.yaml
+      service: mongodb
+    ports:
+      - "27017:27017"
+    networks:
+      - dev
+    volumes:
+      - "/var/mongodb/db:/data/db"
+networks:
+  dev:

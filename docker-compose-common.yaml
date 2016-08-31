@@ -1,0 +1,9 @@
+version: '2'
+services:
+    app:
+        build: .
+        command: bash -c "source .env && npm start"
+        environment:
+            - "DB=mongodb/app"
+    mongodb:
+        image: mongo:3.2.6

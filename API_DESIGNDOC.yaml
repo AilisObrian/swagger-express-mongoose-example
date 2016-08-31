@@ -1,0 +1,577 @@
+swagger: "2.0"
+# XXX: https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md
+
+info:
+  version: "0.0.1"
+  title: "swagger-express-mongoose-example"
+
+basePath: /api
+
+schemes:
+  - http
+  - https
+consumes:
+  - application/json
+  - application/octet-stream
+produces:
+  - application/json
+
+responses:
+  "200":
+    description: 200 Successful 원하는 명령을 잘 수행하였습니다.
+  "201":
+    description: 201 Created 추가되었습니다.
+  "400":
+    description: 400 Bad Request 다음 이유로 실패하였습니다. (입력 형식이 맞는지 확인해주세요.)
+  "401":
+    description: 401 Unauthorized 인증에 실패하였거나, 권한이 없습니다. (새로운 로그인이 필요합니다.)
+  "403":
+    description: 403 Forbidden 명령을 수행할 권한이 없습니다.
+  "404":
+    description: 404 Not Found 원하는 결과물을 찾지 못했습니다.
+  "409":
+    description: 409 Conflict 요청이 충돌하였습니다. (과거에 비슷한 요청을 하셨는지 확인해 주세요.)
+  "412":
+    description: 412 Precondition Failed 요청을 처리하는 도중, 잘못된 입력을 감지하였습니다. (입력한 정보를 확인해주세요.)
+  "428":
+    description: 428 Precondition Required 요청을 처리하는 도중, 추가적인 입력이 필요함을 감지하였습니다.
+  "500":
+    description: 500 Internal Server Error
+  "503":
+    description: 503 Service Unavailable
+
+x-mock-responses:
+  x-private: true
+  system: &x_system_responses
+    "400":
+      $ref: "#/responses/400"
+    "500":
+      $ref: "#/responses/500"
+    "503":
+      $ref: "#/responses/503"
+  restricted: &x_restricted_responses
+    "401":
+      $ref: "#/responses/401"
+    "403":
+      $ref: "#/responses/403"
+  normal:  &x_normal_responses
+    <<: *x_system_responses
+    <<: *x_restricted_responses
+
+
+tags:
+  - name: "Hello"
+    description: "World"
+  - name: "Memo Admin"
+    description: "Memo API for Admin"
+  - name: "Memo User"
+    description: "Memo API for User"
+  - name: "Memo Anonymous"
+    description: "Memo API for Anonymous"
+      # for Searchable by spider, need to cache the rendered pages
+
+x-apiKey: &x-apiKey
+  type: apiKey
+  in: header
+  name: Authorization
+
+securityDefinitions:
+  locked:
+    <<: *x-apiKey
+    x-security-type: locked
+  memo_admin:
+    <<: *x-apiKey
+    description: Admin
+    x-security-type: "admin"
+  memo_user:
+    <<: *x-apiKey
+    description: User
+    x-security-type: "user"
+  memo_anonymous:
+    <<: *x-apiKey
+    description: Anonymous
+    x-security-type: "anonymous"
+
+paths:
+  ######## Swagger UI Start!
+  /swagger:
+    x-swagger-pipe: swagger_raw
+    x-private: true
+
+  /:
+    x-swagger-router-controller: SwaggerUI  #.js
+    x-private: true
+    get:
+      tags:
+        - Hello
+      summary: 현재 이 페이지를 보여줍니다.
+      description: Swagger UI
+      responses:
+        "200":
+          description: "Swagger UI"
+  ######## Swagger UI End!
+
+  /sample/{_id}:
+    x-swagger-router-controller: SampleController  #.js
+    parameters:
+      - $ref: "#/parameters/_id@path"
+    get:
+      summary: "{{ SUMMARY Lives Here }}"
+      description: "{{ DESCRIPTION Lives Here (markdown) }}"
+      tags:
+        - Hello
+      security:
+        - locked: []
+      operationId: getByID
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        <<: *x_normal_responses
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            # $ref: "#/definitions/Sample"
+            # $ref: "#/definitions/InheritedSample"
+            $ref: "#/definitions/AllOfSample"
+        "201":
+          $ref: "#/responses/201"
+        "404":
+          $ref: "#/responses/404"
+        "409":
+          $ref: "#/responses/409"
+        "412":
+          $ref: "#/responses/412"
+        "428":
+          $ref: "#/responses/428"
+
+  /users:
+    x-swagger-router-controller: MemoSecurityController  #.js
+    get:
+      summary: "Get list of user (for Admin)"
+      tags:
+        - "Memo Admin"
+      security:
+        - memo_admin: []
+      x-swagger-router-controller: MemoUserController  #.js
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/RenderedUser"
+        <<: *x_normal_responses
+    post:
+      summary: "Login as credential"
+      tags:
+        - "Memo Admin"
+        - "Memo User"
+        - "Memo Anonymous"
+      operationId: postUser
+      parameters:
+        - name: credential
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              username:
+                type: string
+              password:
+                type: string
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            type: object
+            properties:
+              token:
+                type: string
+        <<: *x_normal_responses
+    put:
+      summary: "Register new user (for Anonymous)"
+      tags:
+        - "Memo Anonymous"
+      security:
+        - memo_anonymous: []
+      operationId: putUser
+      parameters:
+        - $ref: "#/parameters/Security@header"
+        - name: credential
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/User"
+      responses:
+        "201":
+          $ref: "#/responses/201"
+          schema:
+            $ref: "#/definitions/RenderedUser"
+        <<: *x_normal_responses
+  /user/{username}:
+    parameters:
+      - $ref: "#/parameters/username@path"
+    get:
+      summary: "Get user's info (for Admin)"
+      tags:
+        - "Memo Admin"
+      security:
+        - memo_admin: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedUser"
+        <<: *x_normal_responses
+    patch:
+      summary: "Update user's info (for Admin)"
+      tags:
+        - "Memo Admin"
+      security:
+        - memo_admin: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+        - name: data
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/User"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedUser"
+        <<: *x_normal_responses
+    delete:
+      summary: "Kick out this user (for Admin)"
+      tags:
+        - "Memo Admin"
+      security:
+        - memo_admin: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedUser"
+        <<: *x_normal_responses
+  /user/{username}/memos:
+    parameters:
+      - $ref: "#/parameters/username@path"
+    get:
+      summary: "Get user's memos (for Admin/User/Anonymous)"
+      tags:
+        - "Memo Admin"
+        - "Memo User"
+        - "Memo Anonymous"
+      security:
+        # ordered!
+        - memo_user: []
+        - memo_admin: []
+        - memo_anonymous: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedMemos_1ton"
+        <<: *x_normal_responses
+  /me:
+    get:
+      summary: "Get my info (for User)"
+      tags:
+        - "Memo User"
+      security:
+        - memo_user: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedUser"
+        <<: *x_normal_responses
+    patch:
+      summary: "Update my info (for User)"
+      tags:
+        - "Memo User"
+      security:
+        - memo_user: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+        - name: data
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/User"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedUser"
+        <<: *x_normal_responses
+    delete:
+      summary: "Withdrow my id (for User)"
+      tags:
+        - "Memo User"
+      security:
+        - memo_user: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedUser"
+        <<: *x_normal_responses
+  /memos:
+    get:
+      summary: "Get memos (for Admin/User/Anonymous)"
+      tags:
+        - "Memo Admin"
+        - "Memo User"
+        - "Memo Anonymous"
+      security:
+        # ordered!
+        - memo_user: []
+        - memo_admin: []
+        - memo_anonymous: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedMemos_mton"
+        <<: *x_normal_responses
+    put:
+      summary: "Add new memo (for User)"
+      tags:
+        - "Memo User"
+      security:
+        - memo_user: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+        - name: data
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/Memo"
+      responses:
+        "201":
+          $ref: "#/responses/201"
+          schema:
+            $ref: "#/definitions/RenderedMemo_1to1"
+        <<: *x_normal_responses
+  /memo/{_id}:
+    parameters:
+      - $ref: "#/parameters/_id@path"
+    get:
+      summary: "Get specific memo (for Admin/User/Anonymous)"
+      tags:
+        - "Memo Admin"
+        - "Memo User"
+        - "Memo Anonymous"
+      security:
+        # ordered!
+        - memo_user: []
+        - memo_admin: []
+        - memo_anonymous: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedMemo_1to1"
+        <<: *x_normal_responses
+    patch:
+      summary: "Update this memo (for Admin/User)"
+      tags:
+        - "Memo Admin"
+        - "Memo User"
+      security:
+        # ordered
+        - memo_user: []
+        - memo_admin: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+        - name: data
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/Memo"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedMemo_1to1"
+        <<: *x_normal_responses
+    delete:
+      summary: "Delete this memo (for Admin/User)"
+      tags:
+        - "Memo Admin"
+        - "Memo User"
+      security:
+        # ordered
+        - memo_user: []
+        - memo_admin: []
+      parameters:
+        - $ref: "#/parameters/Security@header"
+      responses:
+        "200":
+          $ref: "#/responses/200"
+          schema:
+            $ref: "#/definitions/RenderedMemo_1to1"
+        <<: *x_normal_responses
+
+definitions:
+  Sample: &Sample
+    description: ""
+    required:
+      - visible
+    properties:
+      visible:
+        type: string
+        default: "12345"
+        minLength: 4
+        maxLength: 17
+    x-swagger-mongoose:
+      additional-properties:
+        invisible:
+          type: string
+      index:
+        invisible: 1
+      schema-options:
+        timestamps: true
+
+  InheritedSample: *Sample
+
+  AllOfSample:
+    description: ""
+    type: object
+    allOf:
+      - $ref: "#/definitions/Sample"
+      - type: object
+        <<: *Sample
+      - type: object
+        properties:
+          test:
+            type: array
+            items:
+              $ref: "#/definitions/InheritedSample"
+    x-swagger-mongoose:
+      # TODO: simonguest/swagger-mongoose#20
+      exclude-schema: true
+
+  Memo:
+    description: "Memo Model"
+    properties:
+      content:
+        type: string
+      isSecret:
+        type: boolean
+        default: false
+      # + isDelete, createdAt, modifiedAt
+    x-swagger-mongoose:
+      additional-properties:  # Not visible @ swagger-ui.
+        username:
+          type: string
+      schema-options:
+        timestamps: true
+
+  User:
+    description: "User Model"
+    properties:
+      username:
+        type: string
+      password:
+        type: string  # TODO(P0): not hashed yet.
+      nickname:
+        type: string
+      # + isDelete, createdAt, modifiedAt
+    x-swagger-mongoose:
+      additional-properties:
+        isAdmin:
+          type: boolean
+          default: false
+      index:
+        username: 1
+        isAdmin: 1
+      schema-options:
+        timestamps: true
+
+  RenderedUser:
+    description: "Rendered User"
+    properties:
+      username:
+        type: string
+      nickname:
+        type: string
+      isDelete:
+        type: boolean
+      createdAt:
+        type: string
+      modifiedAt:
+        type: string
+    x-swagger-mongoose:
+      exclude-schema: true
+
+  RenderedMemo_1to1:
+    description: "Rendered Memo (only for swagger-ui)"
+    allOf:
+      - $ref: "#/definitions/Memo"
+      - type: object
+        properties:
+          nickname:
+            type: string
+    x-swagger-mongoose:
+      exclude-schema: true  # only for swagger-ui
+
+  RenderedMemos_1ton:
+    description: "Rendered Memos from specific user (only for swagger-ui)"
+    properties:
+      nickname:
+        type: string
+      memos:
+        type: array
+        items:
+          $ref: "#/definitions/Memo"
+    x-swagger-mongoose:
+      exclude-schema: true  # only for swagger-ui
+
+  RenderedMemos_mton:
+    description: "Rendered Memos (only for swagger-ui)"
+    properties:
+      board:
+        type: array
+        items:
+          $ref: "#/definitions/RenderedMemo_1to1"
+    x-swagger-mongoose:
+      exclude-schema: true  # only for swagger-ui
+
+parameters:
+  _id@path:
+    name: _id
+    in: path
+    required: true
+    type: string
+  Security@header:
+    name: Authorization
+    in: header
+    description: 로그인 후 얻을 수 있는 인증 키의 입력이 필요합니다.
+    required: false
+    type: string
+    default: "Bearer "
+  username@path:
+    name: username
+    in: path
+    required: true
+    type: string
+
